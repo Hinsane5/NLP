@@ -4,7 +4,7 @@ Interactive web demo for the paper *"Evaluasi Dampak Slang Normalization dan
 N-gram Feature terhadap Performa Model Boosting (XGBoost, LightGBM, CatBoost,
 AdaBoost) Dalam Deteksi Spam"*.
 
-Paste an SMS message → see predictions from all 4 boosting models side-by-side,
+Paste an SMS message -> see predictions from all 4 boosting models side-by-side,
 with confidence scores, preprocessing trace, and consensus verdict.
 
 ## Authors

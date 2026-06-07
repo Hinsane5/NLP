@@ -95,7 +95,7 @@ STOP_WORDS = set(stopwords.words('english')) - _KEEP_WORDS
 lemmatizer = WordNetLemmatizer()
 
 # Leetspeak normalization — undo digit/symbol substitutions between letters:
-# "b4nk" → "bank", "acc0unt" → "account", "cl1ck" → "click", "p@ssword".
+# "b4nk" -> "bank", "acc0unt" -> "account", "cl1ck" -> "click", "p@ssword".
 _LEET_MAP = {'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's'}
 _leet_pat = re.compile(r'(?<=[a-z])([01345@$])(?=[a-z])')
 
@@ -127,7 +127,7 @@ def preprocess(text: str, normalize_slang: bool = True) -> str:
         text = _slang_pattern.sub(lambda m: SLANG_DICT[m.group(0)], text)
     # 7. Tokenisation
     tokens = text.split()
-    # 8. Stopword removal; standalone digits → `numtoken`
+    # 8. Stopword removal; standalone digits -> `numtoken`
     tokens = [
         ('numtoken' if t.isdigit() else t)
         for t in tokens
@@ -152,17 +152,17 @@ MODEL_COLORS = {'AdaBoost': '#1f77b4', 'XGBoost': '#d62728',
 
 
 # ─── Page setup ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title='Spam Detector', page_icon='📩', layout='wide')
-st.title('📩 Spam Detector')
-st.caption('Boosting model comparison • AdaBoost / XGBoost / LightGBM / CatBoost')
+st.set_page_config(page_title='Spam Detector', layout='wide')
+st.title('Spam Detector')
+st.caption('Boosting model comparison - AdaBoost / XGBoost / LightGBM / CatBoost')
 st.markdown('---')
 
 
 # ─── Sidebar configuration ────────────────────────────────────────────────────
 with st.sidebar:
-    st.header('⚙️ Configuration')
+    st.header('Configuration')
     normalize = st.checkbox('Use slang normalization', value=True,
-                            help='Applies the slang lexicon (e.g., "u" → "you", "b4nk" → "bank").')
+                            help='Applies the slang lexicon (e.g., "u" -> "you", "b4nk" -> "bank").')
     ngram = st.selectbox('N-gram range', ['Unigram', 'Bigram', 'Trigram'],
                          help='Unigram = single words. Bigram/Trigram include 2- and 3-word phrases.')
     st.markdown('---')
@@ -183,7 +183,7 @@ vec_path = os.path.join(MODELS_DIR, f'vec_{config_slug}.pkl')
 
 if not os.path.exists(vec_path):
     st.error(
-        f'❌ Trained models not found at `{MODELS_DIR}/`. '
+        f'Trained models not found at `{MODELS_DIR}/`. '
         'Run the training notebook (`spam_detection_colab.ipynb`) first '
         'and make sure the `models/` folder is in the same directory as `app.py`.'
     )
@@ -191,17 +191,17 @@ if not os.path.exists(vec_path):
 
 
 # ─── Input area ───────────────────────────────────────────────────────────────
-st.subheader('✉️ Enter a message')
+st.subheader('Enter a message')
 
 EXAMPLES = {
-    '— Try a sample —': '',
-    'Sample (spam): Free prize':
-        'Free entry in 2 a wkly comp to win FA Cup final tkts 21st May 2005. Txt FA to 87121 to receive entry',
-    'Sample (spam): Claim winner':
-        "Congrats! Ur the winner of a gr8 $1000 prize! Claim ur reward now at http://win-now.example",
-    'Sample (spam): Phishing (leetspeak)':
-        'URGENT! Your b4nk acc0unt has been suspended. Cl1ck here to ver1fy now.',
-    'Sample (legit): Casual':
+    '- Try a sample -': '',
+    'Spam (leetspeak): you win':
+        'Y0u w1n! Cla1m y0ur fr33 g1ft n0w bef0re it exp1res.',
+    'Spam (leetspeak): free money':
+        'Fr33 m0n3y!!! W1n a $1000 g1ft card t0day. Reply N0W t0 cla1m y0ur pr1ze.',
+    'Spam (leetspeak): congrats winner':
+        'C0ngratulati0ns! Y0u have w0n a fr33 iph0ne. Cl1ck h3re t0 cla1m n0w!',
+    'Legit: casual':
         'Hey, are you coming to the party tonight? Let me know if you need a ride.',
 }
 
@@ -209,9 +209,9 @@ example_choice = st.selectbox('Quick samples:', list(EXAMPLES.keys()))
 default_text = EXAMPLES[example_choice]
 
 text = st.text_area('Message:', value=default_text, height=120,
-                    placeholder='Paste a message here…')
+                    placeholder='Paste a message here...')
 
-predict_clicked = st.button('🔍 Predict', type='primary')
+predict_clicked = st.button('Predict', type='primary')
 
 
 # ─── Run prediction ───────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ if predict_clicked:
     processed = preprocess(text, normalize_slang=normalize)
 
     # Preprocessing trace
-    st.markdown('### 🔧 Preprocessing Trace')
+    st.markdown('### Preprocessing Trace')
     c1, c2 = st.columns(2)
     with c1:
         st.markdown('**Original input**')
@@ -239,12 +239,12 @@ if predict_clicked:
 
     if X.nnz == 0:
         st.warning(
-            '⚠️ The preprocessed text contains no vocabulary the models have seen. '
+            'The preprocessed text contains no vocabulary the models have seen. '
             'Predictions may be unreliable.'
         )
 
     # Show per-model predictions
-    st.markdown('### 🤖 Model Predictions')
+    st.markdown('### Model Predictions')
     cols = st.columns(4)
 
     spam_count = 0
@@ -267,12 +267,12 @@ if predict_clicked:
             )
             if pred == 1:
                 st.markdown(
-                    "<h2 style='color: #d62728; margin-top: 8px;'>🔴 SPAM</h2>",
+                    "<h2 style='color: #d62728; margin-top: 8px;'>SPAM</h2>",
                     unsafe_allow_html=True
                 )
             else:
                 st.markdown(
-                    "<h2 style='color: #2ca02c; margin-top: 8px;'>🟢 NOT SPAM</h2>",
+                    "<h2 style='color: #2ca02c; margin-top: 8px;'>NOT SPAM</h2>",
                     unsafe_allow_html=True
                 )
             st.progress(prob_spam)
@@ -280,14 +280,14 @@ if predict_clicked:
             st.caption(f'Not-spam probability: {(1-prob_spam)*100:.2f}%')
 
     # Consensus
-    st.markdown('### 📊 Model Consensus')
+    st.markdown('### Model Consensus')
     if spam_count == 4:
-        st.error('⚠️ **Strong spam signal** — all 4 models flagged this message as SPAM.')
+        st.error('**Strong spam signal** - all 4 models flagged this message as SPAM.')
     elif spam_count == 0:
-        st.success('✅ **Clean message** — all 4 models classified this as NOT SPAM.')
+        st.success('**Clean message** - all 4 models classified this as NOT SPAM.')
     else:
         st.warning(
-            f'⚖️ **Mixed verdict** — {spam_count} of 4 models flagged this as SPAM. '
+            f'**Mixed verdict** - {spam_count} of 4 models flagged this as SPAM. '
             'Models disagree; the message is borderline.'
         )
 
