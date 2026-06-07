@@ -16,3 +16,6 @@ dataset.csv.original
 
 # Local Claude Code settings
 .claude/
+
+# Redundant local zip (models/ folder is committed instead)
+result/
