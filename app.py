@@ -1,9 +1,11 @@
 """
-SMS Spam Detector — Streamlit Web UI
+Spam Detector — Streamlit Web UI
 Compares AdaBoost, XGBoost, LightGBM, CatBoost predictions side-by-side.
 
+Preprocessing here MUST stay identical to the training notebook
+(spam_detection_colab.ipynb, Cell 5) or predictions will be wrong.
+
 Run locally:   streamlit run app.py
-Run in Colab:  see the notebook's launcher cell
 """
 import os
 import re
@@ -77,19 +79,61 @@ _slang_pattern = re.compile(
     r'\b(' + '|'.join(re.escape(k) for k in _slang_keys_sorted) + r')\b'
 )
 
-STOP_WORDS = set(stopwords.words('english'))
+# ─── Preprocessing pipeline (identical to notebook Cell 5) ───────────────────
+# NLTK's English stopwords list contains words that are critical spam signals
+# (e.g. "won", "not", "no", "only", "very") and de-apostrophised negation
+# stems (e.g. "couldn", "wouldn", "haven"). Keep them.
+_KEEP_WORDS = {
+    'won', 'win', 'no', 'not', 'only', 'very', 'against', 'again',
+    'don', 'doesn', 'didn', 'couldn', 'wouldn', 'shouldn',
+    'haven', 'hasn', 'hadn', 'isn', 'aren', 'wasn', 'weren',
+    'mustn', 'needn', 'shan', 'mightn',
+    # Spam call-to-action words (NLTK strips them; phishing relies on them).
+    'here', 'now', 'this',
+}
+STOP_WORDS = set(stopwords.words('english')) - _KEEP_WORDS
 lemmatizer = WordNetLemmatizer()
 
+# Leetspeak normalization — undo digit/symbol substitutions between letters:
+# "b4nk" → "bank", "acc0unt" → "account", "cl1ck" → "click", "p@ssword".
+_LEET_MAP = {'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's'}
+_leet_pat = re.compile(r'(?<=[a-z])([01345@$])(?=[a-z])')
+
+
+def _deleet(text: str) -> str:
+    prev = None
+    while prev != text:
+        prev = text
+        text = _leet_pat.sub(lambda m: _LEET_MAP[m.group(1)], text)
+    return text
+
+
 def preprocess(text: str, normalize_slang: bool = True) -> str:
+    """Full pipeline — must mirror the training notebook exactly."""
+    # 1. Case folding
     text = text.lower()
+    # 2. Entity replacement
     text = re.sub(r'https?://\S+|www\.\S+', ' urltoken ', text)
     text = re.sub(r'\b(?:\+?\d[\d\s\-().]{7,})\b', ' phonetoken ', text)
+    text = re.sub(r'[$£€¥]\s?\d[\d,]*(?:\.\d+)?', ' moneytoken ', text)
+    # 3. Leetspeak de-obfuscation (before punctuation removal so @ and $ survive)
+    text = _deleet(text)
+    # 4. Contraction expansion
     text = contractions.fix(text)
+    # 5. Punctuation removal (keep alphanumeric)
     text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    # 6. Slang normalization (optional)
     if normalize_slang:
         text = _slang_pattern.sub(lambda m: SLANG_DICT[m.group(0)], text)
+    # 7. Tokenisation
     tokens = text.split()
-    tokens = [t for t in tokens if t not in STOP_WORDS and not t.isdigit()]
+    # 8. Stopword removal; standalone digits → `numtoken`
+    tokens = [
+        ('numtoken' if t.isdigit() else t)
+        for t in tokens
+        if t not in STOP_WORDS
+    ]
+    # 9. Lemmatisation
     tokens = [lemmatizer.lemmatize(t) for t in tokens]
     return ' '.join(tokens)
 
@@ -108,8 +152,8 @@ MODEL_COLORS = {'AdaBoost': '#1f77b4', 'XGBoost': '#d62728',
 
 
 # ─── Page setup ───────────────────────────────────────────────────────────────
-st.set_page_config(page_title='SMS Spam Detector', page_icon='📩', layout='wide')
-st.title('📩 SMS Spam Detector')
+st.set_page_config(page_title='Spam Detector', page_icon='📩', layout='wide')
+st.title('📩 Spam Detector')
 st.caption('Boosting model comparison • AdaBoost / XGBoost / LightGBM / CatBoost')
 st.markdown('---')
 
@@ -118,15 +162,16 @@ st.markdown('---')
 with st.sidebar:
     st.header('⚙️ Configuration')
     normalize = st.checkbox('Use slang normalization', value=True,
-                            help='Applies the SMS slang lexicon (e.g., "u" → "you").')
+                            help='Applies the slang lexicon (e.g., "u" → "you", "b4nk" → "bank").')
     ngram = st.selectbox('N-gram range', ['Unigram', 'Bigram', 'Trigram'],
                          help='Unigram = single words. Bigram/Trigram include 2- and 3-word phrases.')
     st.markdown('---')
     st.markdown('### About')
     st.markdown(
         'Evaluating the impact of **slang normalization** and **N-gram features** '
-        'on boosting models for SMS spam detection.\n\n'
-        '**Dataset:** UCI SMS Spam Collection (5,572 messages)\n\n'
+        'on boosting models for spam detection.\n\n'
+        '**Dataset:** [Deysi/spam-detection-dataset](https://huggingface.co/datasets/Deysi/spam-detection-dataset) '
+        '(10,900 messages)\n\n'
         '**Authors:**\n- Alexander C. S. Linggodigdo\n- Fanny O. Pangestu\n- Howard F. Goh'
     )
 
@@ -146,25 +191,25 @@ if not os.path.exists(vec_path):
 
 
 # ─── Input area ───────────────────────────────────────────────────────────────
-st.subheader('✉️ Enter an SMS message')
+st.subheader('✉️ Enter a message')
 
 EXAMPLES = {
     '— Try a sample —': '',
     'Sample (spam): Free prize':
         'Free entry in 2 a wkly comp to win FA Cup final tkts 21st May 2005. Txt FA to 87121 to receive entry',
     'Sample (spam): Claim winner':
-        "Congrats! Ur the winner of a gr8 1000 dollar prize! Claim ur reward now at http://win-now.example",
-    'Sample (ham): Casual':
+        "Congrats! Ur the winner of a gr8 $1000 prize! Claim ur reward now at http://win-now.example",
+    'Sample (spam): Phishing (leetspeak)':
+        'URGENT! Your b4nk acc0unt has been suspended. Cl1ck here to ver1fy now.',
+    'Sample (legit): Casual':
         'Hey, are you coming to the party tonight? Let me know if you need a ride.',
-    'Sample (ham): Slang':
-        'lol u r so funny, ttyl gotta finish hw first',
 }
 
 example_choice = st.selectbox('Quick samples:', list(EXAMPLES.keys()))
 default_text = EXAMPLES[example_choice]
 
 text = st.text_area('Message:', value=default_text, height=120,
-                    placeholder='Paste an SMS message here…')
+                    placeholder='Paste a message here…')
 
 predict_clicked = st.button('🔍 Predict', type='primary')
 
@@ -227,19 +272,19 @@ if predict_clicked:
                 )
             else:
                 st.markdown(
-                    "<h2 style='color: #2ca02c; margin-top: 8px;'>🟢 HAM</h2>",
+                    "<h2 style='color: #2ca02c; margin-top: 8px;'>🟢 NOT SPAM</h2>",
                     unsafe_allow_html=True
                 )
             st.progress(prob_spam)
             st.metric(label='Spam probability', value=f'{prob_spam*100:.2f}%')
-            st.caption(f'Ham probability: {(1-prob_spam)*100:.2f}%')
+            st.caption(f'Not-spam probability: {(1-prob_spam)*100:.2f}%')
 
     # Consensus
     st.markdown('### 📊 Model Consensus')
     if spam_count == 4:
-        st.error(f'⚠️ **Strong spam signal** — all 4 models flagged this message as SPAM.')
+        st.error('⚠️ **Strong spam signal** — all 4 models flagged this message as SPAM.')
     elif spam_count == 0:
-        st.success(f'✅ **Clean message** — all 4 models classified this as HAM.')
+        st.success('✅ **Clean message** — all 4 models classified this as NOT SPAM.')
     else:
         st.warning(
             f'⚖️ **Mixed verdict** — {spam_count} of 4 models flagged this as SPAM. '
@@ -250,8 +295,8 @@ if predict_clicked:
     import pandas as pd
     summary = pd.DataFrame({
         'Model': MODEL_NAMES,
-        'Prediction': ['SPAM' if probs[m] >= 0.5 else 'HAM' for m in MODEL_NAMES],
+        'Prediction': ['SPAM' if probs[m] >= 0.5 else 'NOT SPAM' for m in MODEL_NAMES],
         'Spam %': [f'{probs[m]*100:.2f}%' for m in MODEL_NAMES],
-        'Ham %':  [f'{(1-probs[m])*100:.2f}%' for m in MODEL_NAMES],
+        'Not-spam %':  [f'{(1-probs[m])*100:.2f}%' for m in MODEL_NAMES],
     })
     st.dataframe(summary, hide_index=True, use_container_width=True)
